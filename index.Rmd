@@ -19,56 +19,86 @@ tidy=TRUE, tidy.opts=list(width.cutoff=60), R.options=list(max.print=100))
 
 ## Data Wrangling, Exploration, Visualization
 
-### Name and EID here
+### Emily Dunnahoe ekd489
 
 #### Introduction 
 
-Paragraph or two introducing your datasets and variables, why they are interesting to you, etc.
+Is bigfoot an alien? This is the riveting question that this wrangling, exploring, and visualizing activity is hoping to answer. Okay, not this question exactly, but I will look at whether there is correlation between paranormal sightings and particular regions in the US. To this end, I will consider the dates, longitudes, latitudes, cities, and states to eke out any possible meaning. 
 
 ```{R}
-# read your datasets in here, e.g., with read_csv()
+UFO_sightings<-read.csv("https://query.data.world/s/kt4hdqddosnopecjgfcm2j3qk3ixek", header=TRUE, stringsAsFactors=FALSE);
+big_foot<-read.csv("https://query.data.world/s/72wj67foxle6ztzeirnbdz6kpomzag", header=TRUE, stringsAsFactors=FALSE);
 
 ```
 
 #### Tidying: Reshaping
 
-If your datasets are tidy already, demonstrate that you can reshape data with pivot wider/longer here (e.g., untidy and then retidy). Alternatively, it may be easier to wait until the wrangling section so you can reshape your summary statistics. Note here if you are going to do this.
+My data is already technically cleaned, except for column with an unneeded date_time. I will separate and remove the time aspect from the UFO_sightings data, before removing any unnecessary variables for both datasets for ease of joining later. Additionally, I coerced R to view the longitude and latitudes as numeric variables to allow for appropriate dplyr shenanigans. Due to the the size of my dataset, I decided to take a slice of 500 observations from each to make it more manageable. 
 
 ```{R}
-# your tidying code (if applicable; can also wait until wrangling section)
+library(tidyverse)
+big_foot %>%
+  select(-c(2,5,6,10:28)) %>% 
+  add_column(paratype= "bigfoot") ->big_foot_clean
+big_foot_clean %>% 
+  na.omit() %>% 
+  slice(1:500)->big_foot_clean
+
+UFO_sightings %>% 
+  separate("date_time", into=c("date", "NA"), sep="T")->UFO_sightings_clean
+
+  as.numeric(as.character(UFO_sightings_clean$city_longitude))->longitude
+  as.numeric(as.character(UFO_sightings_clean$city_latitude))->latitude 
+UFO_sightings_clean %>% 
+  add_column(paratype= "UFO")%>% 
+  select(-c(5:11)) %>% 
+  na.omit() %>% 
+  slice(1:500)->UFO_sightings_clean 
+
+
 ```
 
     
 #### Joining/Merging
 
 ```{R}
-# your joining code
+library(plyr)
 
-# your joining code
+big_foot_clean %>% 
+  full_join(UFO_sightings_clean, by=c("latitude"="city_latitude", "longitude"="city_longitude", "state"="state", "paratype"="paratype", "date"="date", "observed"="summary"))->big_clean_UFO
 ```
 
-Discussions of joining here. Feel encouraged to break up into more than once code chunk and discuss each in turn.
-
-####  Wrangling
 
 ```{R}
-# your wrangling code
+library(tidyverse)
+library(stringr)
+big_clean_UFO %>% 
+  group_by(state) %>% 
+  summarise(mean.lat=mean(latitude),mean.long=mean(longitude),var.lat=var(latitude), var.long= var(longitude), na.rm=F)->dply.stats
+  
+big_clean_UFO %>% 
+  filter(state==c("New York", "NY")) %>% 
+  mutate(state=str_replace(state, "New York", "NY"))->big_clean_UFO_NY
 
-# your wrangling code
-
-# your wrangling code
 ```
-
-Your discussion of wrangling section here. Feel encouraged to break up into more than once code chunk and discuss each in turn.
+I 
 
 
 #### Visualizing
 
 ```{R}
-# your plot 1
+install.packages("usmap")
+install.packages("rgdal")
+library(usmap)
+big_clean_UFO %>% 
+  select(longitude, latitude, "paratype")->please.work
+  para_map <- usmap_transform(please.work)
+plot_usmap() +
+  geom_point(data = para_map, aes(x = longitude.1, y = latitude.1, color= paratype), alpha = 0.25)
+
 ```
 
-Your discussion of plot 1
+The plot above was supposed to show the paranormal sightings across the United States and to clearly see the distinctly of incidence in particular regions. 
 
 ```{R}
 # your plot 2
