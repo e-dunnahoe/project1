@@ -19,72 +19,148 @@ tidy=TRUE, tidy.opts=list(width.cutoff=60), R.options=list(max.print=100))
 
 ## Data Wrangling, Exploration, Visualization
 
-### Name and EID here
+### Emily Dunnahoe ekd489
 
 #### Introduction 
+Is bigfoot an alien? This is the riveting question that this wrangling, exploring, and visualizing activity is not going to answer. I will look at paranormal sightings across the US, according to "paratype", and season of sighting. I will consider the longitudes, latitudes, seasons, and states to eke out any possible meaning. Mostly, I hope to be entertained.
 
-Paragraph or two introducing your datasets and variables, why they are interesting to you, etc.
 
 ```{R}
-# read your datasets in here, e.g., with read_csv()
+UFO_sightings<-read.csv("https://query.data.world/s/kt4hdqddosnopecjgfcm2j3qk3ixek", header=TRUE, stringsAsFactors=FALSE);
+big_foot<-read.csv("https://query.data.world/s/72wj67foxle6ztzeirnbdz6kpomzag", header=TRUE, stringsAsFactors=FALSE);
 
 ```
 
 #### Tidying: Reshaping
 
-If your datasets are tidy already, demonstrate that you can reshape data with pivot wider/longer here (e.g., untidy and then retidy). Alternatively, it may be easier to wait until the wrangling section so you can reshape your summary statistics. Note here if you are going to do this.
+My data was already tidy. So, below is really just arbitrary pivoting. Because of the amount of variables present, I paired everything done is in the joining/merging section below to make reshaping feel more reasonable from my perspective.   
 
 ```{R}
-# your tidying code (if applicable; can also wait until wrangling section)
+library(tidyverse)
+big_foot %>% 
+  pivot_wider(names_from="classification", values_from="number")->big_foot
+big_foot %>% 
+  pivot_longer(27:29, names_to= "classification", values_to="number")->big_foot
 ```
 
     
 #### Joining/Merging
 
 ```{R}
-# your joining code
+big_foot %>%
+  select(-c(2,3,5,6,10:28)) %>% 
+  add_column(paratype= "bigfoot") %>% 
+  na.omit() %>% 
+  slice(1:500)->bf_clean
+bf_clean %>% 
+  group_by(state) %>% 
+  mutate(ID=cur_group_id())->bf_clean
 
-# your joining code
+UFO_sightings %>% 
+  separate("date_time", into=c("date", "NA"), sep="T")->UFO_clean
+as.numeric(as.character(UFO_clean$city_longitude))->longitude
+as.numeric(as.character(UFO_clean$city_latitude))->latitude 
+UFO_clean %>% 
+  add_column(paratype= "UFO")%>%   
+  na.omit() %>% 
+  slice(1:500) %>% 
+  select(-c(5:11))->UFO_clean
+UFO_clean %>% 
+  group_by(state) %>% 
+  mutate(ID=cur_group_id())->UFO_clean
+
+bf_clean %>% 
+  full_join(UFO_clean, by=c("latitude"="city_latitude", "longitude"="city_longitude", "state"="state", "paratype"="paratype", "date"="date", "observed"="summary", "ID"="ID"))->big_clean_UFO
+
 ```
 
-Discussions of joining here. Feel encouraged to break up into more than once code chunk and discuss each in turn.
+Due to peculiarities of my data or my level of expertise, I had to alter both data sets a bit to get a join that made sense. Above is all of the cleaning steps that happened before joining and my performative reshaping above. 
+
+The column with an unneeded date_time was separated and the time aspect removed from the UFO_sightings data, before removing any unnecessary variables from both data sets for ease of joining later. This resulted in the removal of 21 variables of the original 28 in the big_foot data and 6 variables from 12 in the UFO_sightings data. All excluded columns were weather, geotag, shape, and location variables that weren't necessary to answer questions about paranormal sighting by region, season, and type overall . I added an I.D. variable for each state for visualization and dplyr purposes later.  Additionally, longitude and latitudes needed to be coerced into numeric variables to allow for appropriate dplyr shenanigans. I performed a full join of the altered data, which might be cheating. 
+
 
 ####  Wrangling
 
 ```{R}
-# your wrangling code
+library(lubridate)
+date_new <- as.Date(paste(big_clean_UFO$date,"-01",sep=""))
+big_clean_UFO %>% 
+  mutate(season = lubridate::quarter(date)) %>% 
+  mutate(season = case_when(
+    season == 1 ~ 'Winter',
+    season == 2 ~ 'Spring',
+    season == 3 ~ 'Summer',
+    season == 4 ~ 'Fall'
+  )) %>% 
+  separate(date, into=c("year", "month", "day")) %>% 
+  select(-c("year", "day", "city"))->big_clean_UFO
+big_clean_UFO %>% 
+  group_by(state, season, paratype) %>% 
+  summarise(mean_lo=mean(longitude),sd_lo=sd(longitude), mean_la=mean(latitude), sd_la=sd(latitude),var_lola=var(longitude, latitude, na.rm = T), max_lo=max(longitude), max_la=max(latitude), min_lo=min(longitude), min_la=min(latitude))
 
-# your wrangling code
+big_clean_UFO %>% 
+  group_by(state, ID, paratype, season) %>% 
+  summarise(n=n()) %>% 
+  arrange(desc(n))->tired
 
-# your wrangling code
+big_clean_UFO %>% 
+  filter(season=="Winter") %>% 
+  stringr::str_count("cold")
+  
+
 ```
+To better understand circumstances when and where paranormal sightings generally occur, I created a seasons column using mutate(), before removing the year/day/city using separate() and select(). I grouped by paratype, state, and season before generating summary statistic for longitude, latitude. Unfortunately, this information wasn't vary enlightening in isolation. 
 
-Your discussion of wrangling section here. Feel encouraged to break up into more than once code chunk and discuss each in turn.
+The next chunk was an attempt to contextualize previous numeric summary using the season, state, and paratype character variable in the cleaned data. After using trusty group_by() for state and ID I summarized the number sighting occured in each state, before arranging the results in descending order. 
+
+My last chunck was really just a points grab. I filtered rows by season (winter) and then used str_count to determine how many times observations contained the word "cold". Nine times, which is clearly suspicious. 
 
 
 #### Visualizing
 
 ```{R}
-# your plot 1
+library(RColorBrewer)
+ggplot(big_clean_UFO, aes(longitude, latitude))+
+  geom_density2d_filled()+
+  geom_jitter(aes(colour=paratype))+
+  scale_fill_brewer(palette = "Oranges")+
+  labs(title="Paranormal Sighting Density: Longitude vs Latitude",x="Longitude", y = "Latitude")
 ```
 
-Your discussion of plot 1
+This plot considers the probability of of bigfoot and UFO sightings across differing latitudes and longitudes. Vaguely U.S. shaped, it is clear that there is a higher occurrence of bigfoot sightings in the northeast---specifically around Ohio, which is consistent with summary statistic collected in the Wrangling section. UFO sight are more widely dispersed. Behold, it's beauty!
 
 ```{R}
-# your plot 2
+library(RColorBrewer)
+
+ggplot(big_clean_UFO, aes(x=ID, fill= paratype)) +
+  geom_density(alpha=.75)+
+  facet_grid(paratype~., scales = "free_y")+
+  scale_fill_brewer(palette = "Oranges")+
+  labs(title="Density of Paranormal Sightings Across States",x="State I.D.", y = "Density")
+  
+
+
 ```
 
-Your discussion of plot 2
+This plot display the density of sightings across states in accordance with numeric State I.D. assigned to data. It is a closer view of the distribution of sightings, which reiterates the the conclusion from the first plot.
 
 ```{R}
-# your plot 3
+library(RColorBrewer)
+library(ggplot2)
+ggplot(big_clean_UFO, aes(x = paratype, fill=season))+ geom_bar(position="fill") +
+  scale_fill_brewer(palette = "Oranges")+  
+  scale_y_continuous(name = "Density",limits=(c(0,1.1)))+
+ labs(title="Paranormal Sightings by Season",x="Paratype", y = "Density")
+
+
+
 ```
 
-Your discussion of plot 3
+The final bar plot shows a breakdown of sightings according to season and paratype. Interestingly, there appears to be a seasonal fluctuation of UFO sighting according to season that is absent of the bigfoot folks. 
 
 #### Concluding Remarks
 
-If any!
+What is going on in Ohio? 
 
 
 
